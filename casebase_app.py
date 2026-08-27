@@ -28,7 +28,7 @@ if 'patients' not in st.session_state:
 if 'events' not in st.session_state:
     st.session_state.events = [
         {"patient_id": "PS-2026-0047", "date": "2026-08-16", "type": "Operation", "title": "Laparoscopic-assisted pull-through", "notes": "Procedure went smoothly.", "files": []},
-        {"patient_id": "PS-2026-0047", "date": "2026-08-25", "type": "Complication", "title": "Post-operative constipation", "notes": "Conservative management initiated.", "files": ["xray_abdomen.jpg"]}
+        {"patient_id": "PS-2026-0047", "date": "2026-08-25", "type": "Complication", "title": "Post-operative constipation", "notes": "Conservative management initiated.", "files": []} # أفرغنا الملفات القديمة لتجنب أخطاء العرض
     ]
 
 # متغير للتحكم في القائمة النشطة برمجياً
@@ -98,7 +98,6 @@ if menu == "Dashboard & Cases":
                 
                 action_col1, action_col2 = cols[4].columns(2)
                 
-                # استخدام on_click بدلاً من كتابة الكود داخل الـ if
                 action_col1.button("👁️ View", key=f"view_{row['id']}", on_click=go_to_timeline, args=(row['id'],))
                 action_col2.button("🗑️ Del", key=f"del_{row['id']}", on_click=delete_patient, args=(row['id'],))
         else:
@@ -165,11 +164,33 @@ elif menu == "Patient Timeline":
             if not patient_events:
                 st.info("No events recorded for this patient yet.")
             
-            for event in patient_events:
+            for event_idx, event in enumerate(patient_events):
                 with st.expander(f"🔹 {event['date']} | {event['type']}: {event['title']}", expanded=True):
                     st.write(f"**Notes:** {event['notes']}")
-                    if event['files']:
-                        st.write("📎 **Attachments:**", ", ".join(event['files']))
+                    
+                    # عرض الملفات المرفقة مع إمكانية الـ Preview
+                    if event.get('files') and len(event['files']) > 0:
+                        st.markdown("---")
+                        st.write("📎 **Attachments:**")
+                        
+                        # تقسيم عرض الملفات في أعمدة لشكل أجمل
+                        file_cols = st.columns(3) 
+                        for i, file_data in enumerate(event['files']):
+                            col = file_cols[i % 3]
+                            with col:
+                                # إذا كان الملف صورة (Image) نعرضه مباشرة
+                                if file_data['type'].startswith('image/'):
+                                    st.image(file_data['data'], caption=file_data['name'], use_container_width=True)
+                                
+                                # إذا كان ملف PDF أو Word (نضع زر لفتحه/تحميله)
+                                else:
+                                    st.download_button(
+                                        label=f"📄 Open/Download {file_data['name']}",
+                                        data=file_data['data'],
+                                        file_name=file_data['name'],
+                                        mime=file_data['type'],
+                                        key=f"dl_{event_idx}_{i}"
+                                    )
 
         with col2:
             st.subheader("Add New Event")
@@ -178,18 +199,29 @@ elif menu == "Patient Timeline":
                 event_date = st.date_input("Date")
                 event_title = st.text_input("Title")
                 event_notes = st.text_area("Notes")
-                uploaded_files = st.file_uploader("Upload Documents/Images", accept_multiple_files=True)
+                # السماح برفع الصور والملفات
+                uploaded_files = st.file_uploader("Upload Documents/Images (PDF, Word, JPG, PNG)", accept_multiple_files=True)
                 
                 add_event_btn = st.form_submit_button("Save Event")
                 if add_event_btn:
-                    file_names = [file.name for file in uploaded_files] if uploaded_files else []
+                    
+                    # معالجة الملفات المرفوعة وحفظ بياناتها (الاسم، النوع، المحتوى الفعلي)
+                    processed_files = []
+                    if uploaded_files:
+                        for f in uploaded_files:
+                            processed_files.append({
+                                "name": f.name,
+                                "type": f.type,
+                                "data": f.getvalue() # حفظ محتوى الملف الفعلي للعرض لاحقاً
+                            })
+
                     st.session_state.events.append({
                         "patient_id": selected_patient_id,
                         "date": str(event_date),
                         "type": event_type,
                         "title": event_title,
                         "notes": event_notes,
-                        "files": file_names
+                        "files": processed_files
                     })
                     st.success("Event added to timeline!")
                     st.rerun()
