@@ -31,7 +31,7 @@ if 'events' not in st.session_state:
         {"patient_id": "PS-2026-0047", "date": "2026-08-25", "type": "Complication", "title": "Post-operative constipation", "notes": "Conservative management initiated.", "files": ["xray_abdomen.jpg"]}
     ]
 
-# متغير للتحكم في القائمة النشطة برمجياً (للانتقال من صفحة لأخرى)
+# متغير للتحكم في القائمة النشطة برمجياً
 if 'menu_selection' not in st.session_state:
     st.session_state.menu_selection = "Dashboard & Cases"
 
@@ -39,10 +39,20 @@ if 'menu_selection' not in st.session_state:
 if 'selected_patient_id' not in st.session_state:
     st.session_state.selected_patient_id = None
 
+# --- دوال الأزرار (Callbacks) لحل مشكلة التنقل ---
+def go_to_timeline(patient_id):
+    st.session_state.menu_selection = "Patient Timeline"
+    st.session_state.selected_patient_id = patient_id
+
+def delete_patient(patient_id):
+    st.session_state.patients = [p for p in st.session_state.patients if p['id'] != patient_id]
+    st.session_state.events = [e for e in st.session_state.events if e['patient_id'] != patient_id]
+    if st.session_state.selected_patient_id == patient_id:
+        st.session_state.selected_patient_id = None
+
 # --- القائمة الجانبية (Sidebar) ---
 st.sidebar.title("👨‍⚕️ Welcome Surgeon")
 st.sidebar.markdown("---")
-# نربط القائمة بالمتغير menu_selection
 menu = st.sidebar.radio("Navigation", ["Dashboard & Cases", "Add New Case", "Patient Timeline"], key="menu_selection")
 
 # --- صفحة عرض الحالات والبحث ---
@@ -56,11 +66,9 @@ if menu == "Dashboard & Cases":
     with col2:
         filter_diagnosis = st.selectbox("Filter by Diagnosis", ["All"] + PEDIATRIC_DIAGNOSES)
 
-    # تجهيز البيانات للعرض
     df_patients = pd.DataFrame(st.session_state.patients)
     
     if not df_patients.empty:
-        # تطبيق الفلاتر والبحث
         if search_query:
             df_patients = df_patients[
                 df_patients['name'].str.contains(search_query, case=False) | 
@@ -73,7 +81,6 @@ if menu == "Dashboard & Cases":
         st.markdown("### 📋 Patients List")
         
         if not df_patients.empty:
-            # تعديل مساحات الأعمدة لتستوعب زرين (View و Delete)
             header_cols = st.columns([1.5, 2, 1, 2.5, 2])
             header_cols[0].markdown("**Patient ID**")
             header_cols[1].markdown("**Name**")
@@ -89,23 +96,11 @@ if menu == "Dashboard & Cases":
                 cols[2].write(row['age'])
                 cols[3].write(row['diagnosis'])
                 
-                # تقسيم عمود الأكشنز لزرين
                 action_col1, action_col2 = cols[4].columns(2)
                 
-                # زر العرض (الانتقال للتايم لاين)
-                if action_col1.button("👁️ View", key=f"view_{row['id']}"):
-                    st.session_state.selected_patient_id = row['id']
-                    st.session_state.menu_selection = "Patient Timeline"
-                    st.rerun()
-
-                # زر الحذف
-                if action_col2.button("🗑️ Del", key=f"del_{row['id']}"):
-                    st.session_state.patients = [p for p in st.session_state.patients if p['id'] != row['id']]
-                    st.session_state.events = [e for e in st.session_state.events if e['patient_id'] != row['id']]
-                    # إذا كان المريض المحذوف هو نفسه المفتوح في التايم لاين، نقوم بتفريغ التحديد
-                    if st.session_state.selected_patient_id == row['id']:
-                        st.session_state.selected_patient_id = None
-                    st.rerun()
+                # استخدام on_click بدلاً من كتابة الكود داخل الـ if
+                action_col1.button("👁️ View", key=f"view_{row['id']}", on_click=go_to_timeline, args=(row['id'],))
+                action_col2.button("🗑️ Del", key=f"del_{row['id']}", on_click=delete_patient, args=(row['id'],))
         else:
             st.info("No cases match your search.")
     else:
@@ -145,7 +140,6 @@ elif menu == "Patient Timeline":
         patient_options = {p['id']: f"{p['id']} - {p['name']} ({p['diagnosis']})" for p in st.session_state.patients}
         patient_ids = list(patient_options.keys())
         
-        # تحديد المريض الافتراضي بناءً على ما تم اختياره من زر View
         default_index = 0
         if st.session_state.selected_patient_id in patient_ids:
             default_index = patient_ids.index(st.session_state.selected_patient_id)
@@ -157,7 +151,6 @@ elif menu == "Patient Timeline":
             index=default_index
         )
         
-        # تحديث المتغير إذا تم تغيير المريض يدوياً من القائمة
         st.session_state.selected_patient_id = selected_patient_id
         
         st.markdown("---")
