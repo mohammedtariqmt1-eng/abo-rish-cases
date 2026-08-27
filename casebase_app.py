@@ -5,8 +5,21 @@ from datetime import datetime
 # إعدادات الصفحة
 st.set_page_config(page_title="CaseBase - Pediatric Surgery", layout="wide", page_icon="🧸")
 
+# --- قائمة تشخيصات جراحة الأطفال الشاملة ---
+PEDIATRIC_DIAGNOSES = [
+    "Anorectal Malformation (ARM)", "Appendicitis", "Biliary Atresia", "Branchial Cleft Cyst", 
+    "Bronchopulmonary Sequestration (BPS)", "Choledochal Cyst", "Circumcision / Phimosis", 
+    "Congenital Diaphragmatic Hernia (CDH)", "Congenital Pulmonary Airway Malformation (CPAM)", 
+    "Cystic Hygroma", "Esophageal Atresia (EA)", "Foreign Body Ingestion", "Gastroschisis", 
+    "Hepatoblastoma", "Hirschsprung Disease", "Hydrocele", "Hypospadias", "Inguinal Hernia", 
+    "Intussusception", "Malrotation and Volvulus", "Meckel's Diverticulum", 
+    "Necrotizing Enterocolitis (NEC)", "Neuroblastoma", "Omphalocele", "Pectus Carinatum", 
+    "Pectus Excavatum", "Pyloric Stenosis", "Sacrococcygeal Teratoma", "Thyroglossal Duct Cyst", 
+    "Tracheoesophageal Fistula (TEF)", "Trauma", "Umbilical Hernia", 
+    "Undescended Testis (Cryptorchidism)", "Wilms Tumor", "Other"
+]
+
 # --- قاعدة بيانات وهمية (Session State) ---
-# للحفاظ على البيانات أثناء تصفح التطبيق
 if 'patients' not in st.session_state:
     st.session_state.patients = [
         {"id": "PS-2026-0047", "name": "ياسين محمود", "age": "4 months", "gender": "Male", "diagnosis": "Hirschsprung Disease", "history": "Abdominal distension and constipation since birth."}
@@ -18,35 +31,85 @@ if 'events' not in st.session_state:
         {"patient_id": "PS-2026-0047", "date": "2026-08-25", "type": "Complication", "title": "Post-operative constipation", "notes": "Conservative management initiated.", "files": ["xray_abdomen.jpg"]}
     ]
 
+# متغير للتحكم في القائمة النشطة برمجياً (للانتقال من صفحة لأخرى)
+if 'menu_selection' not in st.session_state:
+    st.session_state.menu_selection = "Dashboard & Cases"
+
+# متغير لحفظ المريض المختار عند الانتقال للـ Timeline
+if 'selected_patient_id' not in st.session_state:
+    st.session_state.selected_patient_id = None
+
 # --- القائمة الجانبية (Sidebar) ---
-st.sidebar.title("👨‍⚕️ Welcome, Dr. Mohamed Tariq")
+st.sidebar.title("👨‍⚕️ Welcome Surgeon")
 st.sidebar.markdown("---")
-menu = st.sidebar.radio("Navigation", ["Dashboard & Cases", "Add New Case", "Patient Timeline"])
+# نربط القائمة بالمتغير menu_selection
+menu = st.sidebar.radio("Navigation", ["Dashboard & Cases", "Add New Case", "Patient Timeline"], key="menu_selection")
 
 # --- صفحة عرض الحالات والبحث ---
 if menu == "Dashboard & Cases":
-    st.title("📁 Cases Dashboard")
+    st.title("🏥 Abu El Reesh Specialized Children Hospital")
     
     # فلتر البحث
     col1, col2 = st.columns(2)
     with col1:
-        search_query = st.text_input("Search by Name or ID...")
+        search_query = st.text_input("Search by Name, ID, or Diagnosis...")
     with col2:
-        filter_diagnosis = st.selectbox("Filter by Diagnosis", ["All", "Hirschsprung Disease", "Anorectal Malformation", "Intussusception", "Other"])
+        filter_diagnosis = st.selectbox("Filter by Diagnosis", ["All"] + PEDIATRIC_DIAGNOSES)
 
     # تجهيز البيانات للعرض
     df_patients = pd.DataFrame(st.session_state.patients)
     
     if not df_patients.empty:
-        # تطبيق الفلاتر
+        # تطبيق الفلاتر والبحث
         if search_query:
-            df_patients = df_patients[df_patients['name'].str.contains(search_query, case=False) | df_patients['id'].str.contains(search_query, case=False)]
+            df_patients = df_patients[
+                df_patients['name'].str.contains(search_query, case=False) | 
+                df_patients['id'].str.contains(search_query, case=False) |
+                df_patients['diagnosis'].str.contains(search_query, case=False)
+            ]
         if filter_diagnosis != "All":
             df_patients = df_patients[df_patients['diagnosis'] == filter_diagnosis]
 
-        st.dataframe(df_patients, use_container_width=True)
+        st.markdown("### 📋 Patients List")
+        
+        if not df_patients.empty:
+            # تعديل مساحات الأعمدة لتستوعب زرين (View و Delete)
+            header_cols = st.columns([1.5, 2, 1, 2.5, 2])
+            header_cols[0].markdown("**Patient ID**")
+            header_cols[1].markdown("**Name**")
+            header_cols[2].markdown("**Age**")
+            header_cols[3].markdown("**Diagnosis**")
+            header_cols[4].markdown("**Actions**")
+            st.markdown("---")
+            
+            for index, row in df_patients.iterrows():
+                cols = st.columns([1.5, 2, 1, 2.5, 2])
+                cols[0].write(row['id'])
+                cols[1].write(row['name'])
+                cols[2].write(row['age'])
+                cols[3].write(row['diagnosis'])
+                
+                # تقسيم عمود الأكشنز لزرين
+                action_col1, action_col2 = cols[4].columns(2)
+                
+                # زر العرض (الانتقال للتايم لاين)
+                if action_col1.button("👁️ View", key=f"view_{row['id']}"):
+                    st.session_state.selected_patient_id = row['id']
+                    st.session_state.menu_selection = "Patient Timeline"
+                    st.rerun()
+
+                # زر الحذف
+                if action_col2.button("🗑️ Del", key=f"del_{row['id']}"):
+                    st.session_state.patients = [p for p in st.session_state.patients if p['id'] != row['id']]
+                    st.session_state.events = [e for e in st.session_state.events if e['patient_id'] != row['id']]
+                    # إذا كان المريض المحذوف هو نفسه المفتوح في التايم لاين، نقوم بتفريغ التحديد
+                    if st.session_state.selected_patient_id == row['id']:
+                        st.session_state.selected_patient_id = None
+                    st.rerun()
+        else:
+            st.info("No cases match your search.")
     else:
-        st.info("No cases found.")
+        st.info("No cases found in the system.")
 
 # --- صفحة إضافة حالة جديدة ---
 elif menu == "Add New Case":
@@ -59,13 +122,12 @@ elif menu == "Add New Case":
         
         col3, col4 = st.columns(2)
         patient_gender = col3.selectbox("Sex", ["Male", "Female"])
-        patient_diagnosis = col4.text_input("Provisional / Final Diagnosis")
+        patient_diagnosis = col4.selectbox("Provisional / Final Diagnosis", PEDIATRIC_DIAGNOSES)
         
         brief_history = st.text_area("Brief History & Chief Complaint")
         
         submitted = st.form_submit_button("Save Case")
         if submitted:
-            # توليد ID جديد
             new_id = f"PS-2026-00{len(st.session_state.patients) + 100}"
             st.session_state.patients.append({
                 "id": new_id, "name": patient_name, "age": patient_age, 
@@ -80,20 +142,31 @@ elif menu == "Patient Timeline":
     if len(st.session_state.patients) == 0:
         st.warning("Please add a case first.")
     else:
-        # اختيار المريض لعرض تفاصيله
         patient_options = {p['id']: f"{p['id']} - {p['name']} ({p['diagnosis']})" for p in st.session_state.patients}
-        selected_patient_id = st.selectbox("Select Patient", options=list(patient_options.keys()), format_func=lambda x: patient_options[x])
+        patient_ids = list(patient_options.keys())
+        
+        # تحديد المريض الافتراضي بناءً على ما تم اختياره من زر View
+        default_index = 0
+        if st.session_state.selected_patient_id in patient_ids:
+            default_index = patient_ids.index(st.session_state.selected_patient_id)
+            
+        selected_patient_id = st.selectbox(
+            "Select Patient", 
+            options=patient_ids, 
+            format_func=lambda x: patient_options[x],
+            index=default_index
+        )
+        
+        # تحديث المتغير إذا تم تغيير المريض يدوياً من القائمة
+        st.session_state.selected_patient_id = selected_patient_id
         
         st.markdown("---")
         
         col1, col2 = st.columns([2, 1])
         
-        # عرض أحداث المريض (Timeline)
         with col1:
             st.subheader("Chronological Events")
             patient_events = [e for e in st.session_state.events if e['patient_id'] == selected_patient_id]
-            
-            # ترتيب الأحداث بالوقت
             patient_events = sorted(patient_events, key=lambda x: x['date'])
             
             if not patient_events:
@@ -105,7 +178,6 @@ elif menu == "Patient Timeline":
                     if event['files']:
                         st.write("📎 **Attachments:**", ", ".join(event['files']))
 
-        # إضافة حدث جديد للمريض
         with col2:
             st.subheader("Add New Event")
             with st.form("new_event_form", clear_on_submit=True):
