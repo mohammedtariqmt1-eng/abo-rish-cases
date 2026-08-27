@@ -28,7 +28,7 @@ if 'patients' not in st.session_state:
 if 'events' not in st.session_state:
     st.session_state.events = [
         {"patient_id": "PS-2026-0047", "date": "2026-08-16", "type": "Operation", "title": "Laparoscopic-assisted pull-through", "notes": "Procedure went smoothly.", "files": []},
-        {"patient_id": "PS-2026-0047", "date": "2026-08-25", "type": "Complication", "title": "Post-operative constipation", "notes": "Conservative management initiated.", "files": []} # أفرغنا الملفات القديمة لتجنب أخطاء العرض
+        {"patient_id": "PS-2026-0047", "date": "2026-08-25", "type": "Complication", "title": "Post-operative constipation", "notes": "Conservative management initiated.", "files": []}
     ]
 
 # متغير للتحكم في القائمة النشطة برمجياً
@@ -59,7 +59,6 @@ menu = st.sidebar.radio("Navigation", ["Dashboard & Cases", "Add New Case", "Pat
 if menu == "Dashboard & Cases":
     st.title("🏥 Abu El Reesh Specialized Children Hospital")
     
-    # فلتر البحث
     col1, col2 = st.columns(2)
     with col1:
         search_query = st.text_input("Search by Name, ID, or Diagnosis...")
@@ -168,29 +167,30 @@ elif menu == "Patient Timeline":
                 with st.expander(f"🔹 {event['date']} | {event['type']}: {event['title']}", expanded=True):
                     st.write(f"**Notes:** {event['notes']}")
                     
-                    # عرض الملفات المرفقة مع إمكانية الـ Preview
+                    # معاينة الملفات المرفقة بأمان تام
                     if event.get('files') and len(event['files']) > 0:
                         st.markdown("---")
                         st.write("📎 **Attachments:**")
                         
-                        # تقسيم عرض الملفات في أعمدة لشكل أجمل
                         file_cols = st.columns(3) 
                         for i, file_data in enumerate(event['files']):
                             col = file_cols[i % 3]
                             with col:
-                                # إذا كان الملف صورة (Image) نعرضه مباشرة
-                                if file_data['type'].startswith('image/'):
-                                    st.image(file_data['data'], caption=file_data['name'], use_container_width=True)
-                                
-                                # إذا كان ملف PDF أو Word (نضع زر لفتحه/تحميله)
+                                # التأكد مما إذا كان الملف مخزناً كقاموس (الإصدار الجديد) أو نص قديم
+                                if isinstance(file_data, dict):
+                                    if file_data.get('type', '').startswith('image/'):
+                                        st.image(file_data['data'], caption=file_data['name'], use_container_width=True)
+                                    else:
+                                        st.download_button(
+                                            label=f"📄 Open {file_data['name']}",
+                                            data=file_data['data'],
+                                            file_name=file_data['name'],
+                                            mime=file_data.get('type', 'application/octet-stream'),
+                                            key=f"dl_{event_idx}_{i}"
+                                        )
                                 else:
-                                    st.download_button(
-                                        label=f"📄 Open/Download {file_data['name']}",
-                                        data=file_data['data'],
-                                        file_name=file_data['name'],
-                                        mime=file_data['type'],
-                                        key=f"dl_{event_idx}_{i}"
-                                    )
+                                    # توافق عكسي مع أي بيانات نصية قديمة
+                                    st.text(f"📄 {file_data}")
 
         with col2:
             st.subheader("Add New Event")
@@ -199,20 +199,17 @@ elif menu == "Patient Timeline":
                 event_date = st.date_input("Date")
                 event_title = st.text_input("Title")
                 event_notes = st.text_area("Notes")
-                # السماح برفع الصور والملفات
                 uploaded_files = st.file_uploader("Upload Documents/Images (PDF, Word, JPG, PNG)", accept_multiple_files=True)
                 
                 add_event_btn = st.form_submit_button("Save Event")
                 if add_event_btn:
-                    
-                    # معالجة الملفات المرفوعة وحفظ بياناتها (الاسم، النوع، المحتوى الفعلي)
                     processed_files = []
                     if uploaded_files:
                         for f in uploaded_files:
                             processed_files.append({
                                 "name": f.name,
                                 "type": f.type,
-                                "data": f.getvalue() # حفظ محتوى الملف الفعلي للعرض لاحقاً
+                                "data": f.getvalue()
                             })
 
                     st.session_state.events.append({
